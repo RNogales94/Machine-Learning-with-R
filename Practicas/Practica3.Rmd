@@ -1,0 +1,302 @@
+---
+title: "Practica 3"
+author: "Rafael Nogales"
+date: "29 de mayo de 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Ejercicio1
+```{r}
+library("ISLR", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+pairs(Auto)
+```
+Las que tienen una relación más directa con el consumo del coche (mpg) son: horsepower (potencia en CV), weight (peso), displacement (cilindrada del motor), cylinder (nº de cilindros) y year (año)
+
+En mi caso voy a utilizar displacement, horsepower, weight y año
+
+```{r}
+#Creamos los conjuntos TRAIN y TEST
+library("caret", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+set.seed(15)
+train <- createDataPartition(Auto$mpg, times = 1, p = 0.8, list = F)
+Auto.train <- Auto[train,]
+Auto.test <- Auto[-train,]
+```
+
+Creamos una variable binaria...
+```{r}
+umbral <- median(Auto$mpg)
+mpg01 <- 2*(Auto$mpg > umbral)-1
+Auto <- cbind(Auto, mpg01)
+```
+
+Regresion Logistica
+```{r}
+Auto.model <- glm(mpg01~ displacement + horsepower + weight + year, data = Auto.train)
+summary(Auto.model)
+mpg.pred <- predict(Auto.model, Auto.test)
+mpg.pred.class <- 2*(mpg.pred > 0)-1
+t<- table(predict=mpg.pred.class, truth=Auto.test$mpg01)
+t
+error <- 1 - sum(diag(t))/sum(t)
+error
+```
+
+
+
+
+
+## Normalización de datos
+Creamos en primer lugar una función para normalizar dataframes, está función tiene 
+en cuenta que solo deben normalizarse las caracteristicas numéricas:
+```{r}
+#Añadimos la libreria plyr para usar "numcolwise"
+library("plyr", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+
+normaliza <- function(df){
+    paramNorm <- function(df){
+        paramNorm = numcolwise(range)(df)
+        
+        paramNorm[2,]=paramNorm[2,]-paramNorm[1,]
+        paramNorm[2,]=ifelse(paramNorm[2,]>0, paramNorm[2,], 1)
+        paramNorm  
+    }
+    param <- paramNorm(df)
+    
+    numerics = sapply(df,is.numeric)
+
+    df[, numerics] = scale(df[,numerics], 
+                           unlist(param[1,]), 
+                           unlist(param[2,]))
+    df
+}
+```
+KNN
+
+
+
+
+
+```{r}
+library("ROCR", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+
+```
+
+
+
+
+#Ejercicio2
+```{r}
+library("MASS", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+library("glmnet", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+set.seed(13)
+lambdas <- cv.glmnet(x = as.matrix(Boston[,-1]), y = as.matrix(Boston[,1]), alpha=1)
+bestLambda <- lambdas$lambda.min
+lasso.model <- glmnet(x = as.matrix(Boston[,-1]), y = as.matrix(Boston[,1]), alpha = 1, standardize = FALSE)
+lasso.coef <- predict(lasso.model, type="coefficients", s=bestLambda)[1:14,]
+lasso.coef
+selected <- lasso.coef[abs(lasso.coef) > 0.1 ]
+selected
+```
+
+```{r}
+set.seed(13)
+
+nameSelected <- names(selected[2:length(selected)])
+ridge.model <- glmnet(x = as.matrix(Boston[,nameSelected]), y = matrix(Boston[,1]), alpha = 0, standardize = FALSE)
+ridge.pred <- predict(ridge.model, newx = as.matrix(Boston[,nameSelected]), s=bestLambda, type = "response")
+error <- mean((ridge.pred - Boston[,1])^2)
+error
+```
+
+
+```{r}
+set.seed(13)
+library("e1071", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+umbral <- median(Boston$crim)
+XCrim <- 2*(Boston$crim > umbral)-1
+XCrim
+#Sustituimos crim por la nueva columna
+XBoston <- cbind(XCrim, Boston[,-1])
+XBostonSVM <- svm(XCrim~., data=XBoston, kernel="linear", cost=0.1, scale = FALSE)
+XBostonSVM2 <- svm(XCrim~., data=XBoston, kernel="radial", cost=10, scale = FALSE)
+
+
+```
+
+```{r}
+crime.pred <- predict(XBostonSVM, XBoston)
+crime.pred.class <- 2*(crime.pred > 0)-1
+table(predict=crime.pred.class, truth=XBoston$XCrim)
+
+crime.pred2 <- predict(XBostonSVM2, XBoston)
+crime.pred.class2 <- 2*(crime.pred2 > 0)-1
+table(predict=crime.pred.class2, truth=XBoston$XCrim)
+
+```
+
+##Ejercicio 4
+```{r}
+set.seed(1)
+library("ISLR", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+train <- sample(1:1070, 800, replace = F)
+train.data <- OJ[train, ]
+
+library("tree", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+modeloOJ <- tree(formula = Purchase ~., data = OJ, subset = train)
+summary(modeloOJ)
+
+plot(modeloOJ)
+text(modeloOJ)
+
+OJ.pred <- predict(modeloOJ, OJ[-train,], type = "class")
+table(OJ.pred, OJ[-train,1])
+tasa.error <- (49+12)/(49+12+147+62)
+cat(tasa.error)
+
+cv.OJ <- cv.tree(modeloOJ, FUN=prune.misclass)
+print(cv.OJ)
+```
+
+
+#Ejercicio 3
+```{r}
+set.seed(13)
+library("MASS", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+library("caret", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+library("randomForest", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+
+train <- createDataPartition(Boston$medv, times = 1, p = 0.8, list = F)
+Boston.train <- Boston[train,]
+Boston.test <- Boston[-train,]
+Boston.model <- randomForest(medv~., data = Boston, subset = train, mtry=13,ntree=25, importance = TRUE)
+Boston.predict <- predict(Boston.model, newdata = Boston[-train,])
+mean((Boston$medv[-train] - Boston.predict)^2)
+
+```
+
+```{r}
+set.seed(13)
+train <- createDataPartition(Boston$medv, times = 1, p = 0.8, list = F)
+Boston.train <- Boston[train,]
+Boston.test <- Boston[-train,]
+Boston.model <- randomForest(medv~., data = Boston, subset = train, ntree=50, importance = TRUE)
+Boston.predict <- predict(Boston.model, newdata = Boston[-train,])
+mean((Boston$medv[-train] - Boston.predict)^2)
+
+#Estimacion del numero correcto de arboles:
+errorNtree <- function(ntree){
+    Boston.model <- randomForest(medv~., data = Boston, subset = train, ntree=50, importance = TRUE)
+    Boston.predict <- predict(Boston.model, newdata = Boston[-train,])
+    return(mean((Boston$medv[-train] - Boston.predict)^2))
+}
+
+N <- 100
+error <- sapply(1:N, errorNtree)
+
+
+print(1:N)
+print(error)
+plot(1:N, errores, col="red", main = "Random Forest error", xlab="N-Trees", ylab="ECM")
+
+bestntree <- which.min(error)
+cat(c("El menor error se produce con ", bestntree, " arboles: ",error[bestntree]))
+
+```
+
+
+```{r}
+library("gbm", lib.loc="/Library/Frameworks/R.framework/Versions/3.2/Resources/library")
+set.seed(13)
+Boston.boost <- gbm(medv~., data= Boston[train,], distribution = "gaussian", n.trees = 5000, interaction.depth = 4)
+summary(Boston.boost)
+Boston.predict <- predict(Boston.boost, newdata = Boston[-train,], n.trees = 5000)
+mean((Boston.predict - Boston$medv[-train])^2)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
